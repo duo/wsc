@@ -52,11 +52,18 @@ func (c *Client) Connect() error {
 		return err
 	}
 
+	c.shortCircuitReconnect = make(chan struct{})
+
 RETRYCONN:
 	conn, err := c.attemptConnection()
 	if err != nil {
 		log.Infof("Failed to connect, sleeping for %s and retry, error: %v", c.options.ConnectRetryInterval, err)
-		time.Sleep(c.options.ConnectRetryInterval)
+
+		select {
+		case <-c.shortCircuitReconnect:
+			log.Debugln("Reconnect was short-circuited")
+		case <-time.After(c.options.ConnectRetryInterval):
+		}
 
 		if c.status.ConnectionStatus() == connecting { // Possible connection aborted elsewhere
 			goto RETRYCONN
